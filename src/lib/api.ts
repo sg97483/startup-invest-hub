@@ -4,8 +4,13 @@ import summary from '@/data/summary.json';
 /**
  * 공고 데이터는 `npm run crawl` 이 만들어내는 정적 파일(/data/programs.json)에서 옵니다.
  * 1,700건이 넘기 때문에 JS 번들에 넣지 않고 런타임에 한 번만 받아와 캐시합니다.
+ *
+ * 파일 경로가 항상 같아서 브라우저가 예전 데이터를 계속 쓰는 문제가 있으므로,
+ * 번들에 함께 들어가는 summary.json 의 수집 시각을 쿼리로 붙여 재배포마다 URL 을 바꿉니다.
  */
-const DATA_URL = '/data/programs.json';
+const DATA_URL = `/data/programs.json?v=${encodeURIComponent(
+  (summary as { generatedAt?: string }).generatedAt ?? 'dev'
+)}`;
 
 const EMPTY: ProgramDataset = {
   generatedAt: '',

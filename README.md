@@ -66,12 +66,55 @@ npx vercel --prod
 
 기술 스택: Next.js 15 (App Router), React 19, Vanilla CSS(글래스모피즘), Vercel 배포.
 
-### 데이터 갱신 주기
+### 자동 갱신 (GitHub Actions)
 
-공고는 매일 새로 올라오므로 주기적으로 `npm run crawl` 후 재배포해야 합니다.
+[`.github/workflows/crawl-and-deploy.yml`](.github/workflows/crawl-and-deploy.yml) 이
+**매일 07:00(KST)** 에 새로 수집하고 프로덕션에 배포합니다. 새로 올라온 공고는 다음 날 아침 자동 반영됩니다.
+
+동작 순서: `npm ci` → `npm run crawl` → **수집 결과 검증** → `vercel deploy --prod`
+
+검증 단계에서 총 수집량이 500건 미만이거나 특정 소스가 0건이면 배포를 중단합니다.
+포털 HTML 구조가 바뀌어 수집이 깨졌을 때 빈 사이트가 배포되는 걸 막기 위한 안전장치입니다.
+
+수집한 JSON 은 저장소에 다시 커밋하지 않고 배포본에만 반영합니다(매일 2MB씩 커밋되면 저장소가 불어나므로).
+
+#### 최초 설정 (1회)
+
+1. GitHub 에 저장소를 만들고 푸시합니다.
+
+   ```bash
+   git remote add origin https://github.com/<계정>/startup-invest-hub.git
+   git push -u origin main
+   ```
+
+2. https://vercel.com/account/tokens 에서 토큰을 발급합니다.
+
+3. 저장소 **Settings → Secrets and variables → Actions → New repository secret** 에
+   이름 `VERCEL_TOKEN` 으로 그 토큰을 등록합니다.
+
+4. **Actions 탭 → 공고 자동 수집 및 배포 → Run workflow** 로 한 번 수동 실행해 확인합니다.
+
+수동 갱신이 필요하면 로컬에서 아래를 실행해도 됩니다.
 
 ```bash
 npm run crawl && npx vercel --prod
 ```
 
-깃 저장소를 연결하면 GitHub Actions 로 매일 자동 수집·배포하도록 확장할 수 있습니다.
+## 5. 지역 분류 방식
+
+원본 포털은 지자체가 주관하는 공고에도 지역을 '전국'으로 적어두는 경우가 많습니다
+(K-Startup 229건 중 126건). 그대로 쓰면 "경기" 필터에서 수원시 공고가 안 나옵니다.
+그래서 [`lib/districts.js`](scripts/crawler/lib/districts.js) 의 시·군·구 사전으로 다음처럼 보정합니다.
+
+| 상황 | 처리 | 예시 |
+| --- | --- | --- |
+| 포털이 특정 시도를 지정 | 그대로 신뢰 | 제주특별자치도 → 제주 |
+| 기관명·사업명에 기초자치단체가 있음 | 기초지자체 사업으로 보고 '전국'을 대체 | 수원도시재단 → 경기 |
+| 광역기관명만 있음 | 광역기관은 전국 사업도 하므로 둘 다 유지 | 서울창조경제혁신센터 → 전국, 서울 |
+| 아무 단서 없음 | 포털 값 유지 | 창업진흥원 → 전국 |
+
+오분류를 막기 위해, 여러 시도에 같은 이름이 있는 곳(중구·서구·광주시·고성군 등)은 사전에서 제외했고,
+일반 단어와 겹치는 이름(예산·장수·영양·진도 등)은 '예산군'처럼 행정구역 접미사가 붙었을 때만 인정합니다.
+
+보정 결과 '전국' 표기는 534건 → 452건으로 줄고 나머지 지역이 그만큼 늘었습니다
+(서울 74→96, 경북 139→156, 경기 206→221). 어떤 근거로 지역이 정해졌는지는 상세 페이지에 표시됩니다.

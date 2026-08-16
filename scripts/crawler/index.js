@@ -14,6 +14,10 @@ const path = require('path');
 const kstartup = require('./sources/kstartup');
 const bizinfo = require('./sources/bizinfo');
 const { REGIONS, CATEGORIES } = require('./lib/taxonomy');
+const { PROJECTS, matchProjects } = require('./lib/projects');
+
+/** 공고 신청자격 판정 기준이 되는 창업 단계. */
+const FOUNDER_STAGE = 'pre-founder';
 
 const ROOT = path.join(__dirname, '..', '..');
 const OUT_FILE = path.join(ROOT, 'public', 'data', 'programs.json');
@@ -60,6 +64,7 @@ function merge(lists) {
 
 function finalize(program) {
   const alwaysOpen = !program.endDate && ALWAYS_OPEN.test(program.applyPeriod || '');
+  const { projects, projectMatches } = matchProjects(program, { stage: FOUNDER_STAGE });
   const searchText = [
     program.title,
     program.businessName,
@@ -78,6 +83,8 @@ function finalize(program) {
     ...program,
     region: program.regions[0] || '전국',
     alwaysOpen,
+    projects,
+    projectMatches,
     searchText,
   };
 }
@@ -124,11 +131,19 @@ async function main() {
     generatedAt: new Date().toISOString(),
     baseDate: today(),
     total: open.length,
+    founderStage: FOUNDER_STAGE,
     sources: countBy('source'),
     regionCounts: countBy('regions'),
     categoryCounts: countBy('category'),
+    projectCounts: countBy('projects'),
     regions: REGIONS,
     categories: CATEGORIES,
+    projects: PROJECTS.map(({ id, name, tagline, description }) => ({
+      id,
+      name,
+      tagline,
+      description,
+    })),
     programs: open,
   };
 
@@ -145,6 +160,7 @@ async function main() {
   console.log(`모집중    : ${open.length}건`);
   console.log('소스별    :', payload.sources);
   console.log('분야별    :', payload.categoryCounts);
+  console.log('프로젝트별:', payload.projectCounts, `(신청자격 기준: ${FOUNDER_STAGE})`);
   console.log(`저장 위치 : ${path.relative(process.cwd(), OUT_FILE)}`);
   console.log(`소요 시간 : ${((Date.now() - started) / 1000).toFixed(1)}초`);
 }

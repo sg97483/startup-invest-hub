@@ -35,19 +35,24 @@ export default function Home() {
   );
 
   const filtered = useMemo(() => {
-    const { region, category, source, keyword, sort, hideAlwaysOpen } = deferredFilters;
+    const { region, category, source, project, keyword, sort, hideAlwaysOpen } = deferredFilters;
     const needle = keyword.trim().toLowerCase();
 
     const result = programs.filter((program) => {
       if (region !== 'all' && !program.regions.includes(region)) return false;
       if (category !== 'all' && program.category !== category) return false;
       if (source !== 'all' && program.source !== source) return false;
+      if (project !== 'all' && !(program.projects ?? []).includes(project)) return false;
       if (hideAlwaysOpen && !program.endDate) return false;
       if (needle && !(program.searchText ?? program.title.toLowerCase()).includes(needle)) return false;
       return true;
     });
 
+    const fit = (program: (typeof programs)[number]) =>
+      project === 'all' ? 0 : program.projectMatches?.[project]?.score ?? 0;
+
     result.sort((a, b) => {
+      if (sort === 'fit') return fit(b) - fit(a);
       if (sort === 'latest') return (b.postedDate ?? '').localeCompare(a.postedDate ?? '');
       if (sort === 'popular') return (b.views ?? 0) - (a.views ?? 0);
       const left = daysLeft(a);
@@ -100,8 +105,10 @@ export default function Home() {
         regions={dataset?.regions ?? summary.regions ?? []}
         categories={dataset?.categories ?? summary.categories ?? []}
         sources={sources}
+        projects={dataset?.projects ?? summary.projects ?? []}
         regionCounts={dataset?.regionCounts ?? summary.regionCounts ?? {}}
         categoryCounts={dataset?.categoryCounts ?? summary.categoryCounts ?? {}}
+        projectCounts={dataset?.projectCounts ?? summary.projectCounts ?? {}}
       />
 
       {loading ? (
@@ -121,7 +128,11 @@ export default function Home() {
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1.5rem' }}>
             {filtered.slice(0, visible).map((program) => (
-              <ProgramCard key={program.id} program={program} />
+              <ProgramCard
+                key={program.id}
+                program={program}
+                highlightProject={deferredFilters.project === 'all' ? undefined : deferredFilters.project}
+              />
             ))}
           </div>
 

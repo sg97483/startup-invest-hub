@@ -51,18 +51,34 @@ export interface SupportProgram {
   guideUrl?: string;
   views?: number;
 
+  /** 이 공고가 맞는 내 프로젝트 id 목록 (예: ['codipop']) */
+  projects?: string[];
+  /** 프로젝트별 적합도. kind: domain=분야 적합 / general=분야 무관 일반 창업지원 */
+  projectMatches?: Record<string, { score: number; hits: string[]; kind: 'domain' | 'general' }>;
+
   /** 소문자 통합 검색용 텍스트 */
   searchText?: string;
+}
+
+export interface ProjectProfile {
+  id: string;
+  name: string;
+  tagline: string;
+  description: string;
 }
 
 export interface ProgramDataset {
   generatedAt: string;
   baseDate: string;
   total: number;
+  /** 신청자격 판정 기준이 된 창업 단계 */
+  founderStage?: string;
   sources: Record<string, number>;
   regionCounts: Record<string, number>;
   categoryCounts: Record<string, number>;
+  projectCounts: Record<string, number>;
   regions: string[];
   categories: string[];
+  projects: ProjectProfile[];
   programs: SupportProgram[];
 }

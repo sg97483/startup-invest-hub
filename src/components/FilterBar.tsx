@@ -1,13 +1,15 @@
 'use client';
 
-import { Search, X } from 'lucide-react';
+import { Search, X, Sparkles } from 'lucide-react';
+import { ProjectProfile } from '@/types';
 
 export interface Filters {
   region: string;
   category: string;
   source: string;
+  project: string;
   keyword: string;
-  sort: 'imminent' | 'latest' | 'popular';
+  sort: 'imminent' | 'latest' | 'popular' | 'fit';
   hideAlwaysOpen: boolean;
 }
 
@@ -15,6 +17,7 @@ export const DEFAULT_FILTERS: Filters = {
   region: 'all',
   category: 'all',
   source: 'all',
+  project: 'all',
   keyword: '',
   sort: 'imminent',
   hideAlwaysOpen: false,
@@ -26,8 +29,10 @@ interface FilterBarProps {
   regions: string[];
   categories: string[];
   sources: string[];
+  projects: ProjectProfile[];
   regionCounts: Record<string, number>;
   categoryCounts: Record<string, number>;
+  projectCounts: Record<string, number>;
 }
 
 const SORTS: { key: Filters['sort']; label: string }[] = [
@@ -73,11 +78,24 @@ export default function FilterBar({
   regions,
   categories,
   sources,
+  projects,
   regionCounts,
   categoryCounts,
+  projectCounts,
 }: FilterBarProps) {
   const set = <K extends keyof Filters>(key: K, value: Filters[K]) =>
     onChange({ ...filters, [key]: value });
+
+  // 프로젝트를 고르면 적합도순이 가장 쓸모 있으므로 기본 정렬을 그쪽으로 바꿉니다.
+  const selectProject = (id: string) =>
+    onChange({
+      ...filters,
+      project: id,
+      sort: id === 'all' ? (filters.sort === 'fit' ? 'imminent' : filters.sort) : 'fit',
+    });
+
+  const sorts = filters.project === 'all' ? SORTS : [{ key: 'fit' as const, label: '적합도순' }, ...SORTS];
+  const activeProject = projects.find((project) => project.id === filters.project);
 
   const isDirty = JSON.stringify(filters) !== JSON.stringify(DEFAULT_FILTERS);
 
@@ -128,8 +146,8 @@ export default function FilterBar({
           )}
         </div>
 
-        <div style={{ display: 'flex', gap: '0.375rem' }}>
-          {SORTS.map((sort) => (
+        <div style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap' }}>
+          {sorts.map((sort) => (
             <button
               key={sort.key}
               type="button"
@@ -141,6 +159,42 @@ export default function FilterBar({
             </button>
           ))}
         </div>
+      </div>
+
+      <div style={group}>
+        <span style={{ ...label, display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+          <Sparkles size={14} color="var(--accent-color)" />내 프로젝트
+        </span>
+        <div style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            className={`glass-button ${filters.project === 'all' ? 'active' : ''}`}
+            onClick={() => selectProject('all')}
+            style={{ fontSize: '0.8125rem', padding: '0.35rem 0.7rem' }}
+          >
+            전체
+          </button>
+          {projects.map((project) => (
+            <button
+              key={project.id}
+              type="button"
+              className={`glass-button ${filters.project === project.id ? 'active' : ''}`}
+              onClick={() => selectProject(project.id)}
+              title={project.description}
+              style={{ fontSize: '0.8125rem', padding: '0.35rem 0.7rem' }}
+            >
+              {project.name}
+              {projectCounts[project.id] ? (
+                <span style={{ opacity: 0.6, fontSize: '0.75rem' }}>{projectCounts[project.id]}</span>
+              ) : null}
+            </button>
+          ))}
+        </div>
+        {activeProject && (
+          <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.125rem', lineHeight: 1.5 }}>
+            {activeProject.tagline} · 예비창업자 신청 가능 공고만 추렸습니다.
+          </p>
+        )}
       </div>
 
       <div style={group}>

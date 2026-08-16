@@ -5,6 +5,8 @@ import { Calendar, MapPin, Building2, Users } from 'lucide-react';
 
 interface ProgramCardProps {
   program: SupportProgram;
+  /** 프로젝트 필터가 걸려 있을 때, 왜 매칭됐는지 보여줄 프로젝트 id */
+  highlightProject?: string;
 }
 
 const SOURCE_COLORS: Record<string, { bg: string; fg: string; border: string }> = {
@@ -12,7 +14,8 @@ const SOURCE_COLORS: Record<string, { bg: string; fg: string; border: string }> 
   '기업마당': { bg: 'rgba(249, 115, 22, 0.18)', fg: '#fb923c', border: 'rgba(249, 115, 22, 0.3)' },
 };
 
-export default function ProgramCard({ program }: ProgramCardProps) {
+export default function ProgramCard({ program, highlightProject }: ProgramCardProps) {
+  const match = highlightProject ? program.projectMatches?.[highlightProject] : undefined;
   const left = daysLeft(program);
   const isImminent = left !== null && left >= 0 && left <= 7;
   const source = SOURCE_COLORS[program.source] ?? {
@@ -98,6 +101,35 @@ export default function ProgramCard({ program }: ProgramCardProps) {
             </div>
           ) : null}
         </div>
+
+        {match && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              flexWrap: 'wrap',
+              paddingTop: '0.75rem',
+              borderTop: '1px solid var(--border)',
+              fontSize: '0.75rem',
+              color: 'var(--text-secondary)',
+            }}
+          >
+            <span
+              className="tag"
+              style={
+                match.kind === 'domain'
+                  ? { background: 'rgba(16, 185, 129, 0.18)', color: '#34d399', borderColor: 'rgba(16, 185, 129, 0.3)' }
+                  : { background: 'rgba(148, 163, 184, 0.18)', color: '#cbd5e1', borderColor: 'rgba(148, 163, 184, 0.3)' }
+              }
+            >
+              {match.kind === 'domain' ? '분야 적합' : '일반 창업지원'}
+            </span>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {match.hits.join(' · ')}
+            </span>
+          </div>
+        )}
       </div>
     </Link>
   );

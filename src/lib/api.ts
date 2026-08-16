@@ -19,8 +19,10 @@ const EMPTY: ProgramDataset = {
   sources: {},
   regionCounts: {},
   categoryCounts: {},
+  projectCounts: {},
   regions: [],
   categories: [],
+  projects: [],
   programs: [],
 };
 

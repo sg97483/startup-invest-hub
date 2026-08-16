@@ -1,0 +1,25 @@
+{
+  "name": "startup-support-hub",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "crawl": "node scripts/crawler/index.js",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "firebase": "^12.16.0",
+    "lucide-react": "^1.27.0",
+    "next": "^15.1.0",
+    "react": "19.0.0",
+    "react-dom": "19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "typescript": "^5"
+  }
+}

@@ -1,0 +1,63 @@
+name: 공고 자동 수집 및 배포
+
+# 매일 07:00 KST(22:00 UTC)에 K-Startup·기업마당을 다시 긁어 프로덕션에 배포합니다.
+# Actions 탭에서 "Run workflow" 로 수동 실행도 가능합니다.
+on:
+  schedule:
+    - cron: '0 22 * * *'
+  workflow_dispatch:
+
+# 배포가 겹치지 않도록 한 번에 하나만 실행합니다.
+concurrency:
+  group: crawl-and-deploy
+  cancel-in-progress: false
+
+jobs:
+  crawl-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      VERCEL_ORG_ID: team_30ilzWg2wlPQhW6OTFJWthKt
+      VERCEL_PROJECT_ID: prj_QaGntdwpDoD9InsT5DkkJK8UXtkD
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: 의존성 설치
+        run: npm ci
+
+      - name: 공고 수집
+        run: npm run crawl
+
+      - name: 수집 결과 검증
+        # 소스 사이트 구조가 바뀌어 수집이 반쯤 실패했을 때 빈 사이트를 배포하지 않도록 막습니다.
+        run: |
+          node -e "
+            const data = require('./public/data/programs.json');
+            const sources = Object.entries(data.sources);
+            console.log('수집 결과:', data.total, '건', JSON.stringify(data.sources));
+            if (data.total < 500) {
+              console.error('수집량이 비정상적으로 적습니다(500건 미만). 배포를 중단합니다.');
+              process.exit(1);
+            }
+            for (const [name, count] of sources) {
+              if (count === 0) {
+                console.error(name + ' 수집이 0건입니다. 배포를 중단합니다.');
+                process.exit(1);
+              }
+            }
+          "
+
+      - name: Vercel 프로덕션 배포
+        run: npx vercel deploy --prod --yes --token "$VERCEL_TOKEN"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+      - name: 수집 요약 출력
+        if: always()
+        run: node -e "const d=require('./public/data/programs.json');console.log('기준일',d.baseDate,'/ 총',d.total,'건');console.log(d.sources)"

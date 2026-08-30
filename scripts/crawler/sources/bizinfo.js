@@ -5,7 +5,7 @@
  * Central-government + 지자체 support programmes. The listing is a plain table,
  * so one pass over the pagination gives 지원분야 / 신청기간 / 소관부처 / 수행기관.
  */
-const { fetchText } = require('../lib/http');
+const { fetchText, createCookieJar } = require('../lib/http');
 const { toText, match1, toISODate, decodeEntities } = require('../lib/parse');
 const { normalizeCategory, resolveRegions } = require('../lib/taxonomy');
 
@@ -57,10 +57,16 @@ function parseListPage(html) {
 async function collect({ maxPages = MAX_PAGES, log = console.log } = {}) {
   log('[기업마당] 지원사업 공고 목록 수집…');
 
-  const first = await fetchText(listUrl(1));
+  // 낯선 IP(GitHub 러너 등)에서는 세션 쿠키 없이 바로 목록을 치면 빈 응답이 오는 일이 있어
+  // 목록 진입 페이지를 한 번 먼저 호출해 쿠키를 받아둡니다.
+  const jar = createCookieJar();
+  const stats = { ok: 0, failed: 0 };
+  await fetchText(LIST, { jar, stats });
+
+  const first = await fetchText(listUrl(1), { jar, stats, referer: LIST });
   if (!first) {
     log('[기업마당] 첫 페이지를 가져오지 못했습니다.');
-    return [];
+    return { programs: [], health: { ...stats, pages: 0, expectedPages: 0 } };
   }
 
   const seen = new Map();
@@ -68,7 +74,8 @@ async function collect({ maxPages = MAX_PAGES, log = console.log } = {}) {
 
   const pages = Math.min(lastPage(first), maxPages);
   for (let page = 2; page <= pages; page++) {
-    const html = await fetchText(listUrl(page), { referer: LIST });
+    // 100페이지 넘게 연속으로 두드리면 차단당하기 쉬워 약간씩 간격을 둡니다.
+    const html = await fetchText(listUrl(page), { referer: LIST, jar, stats, delayMs: 120 });
     if (!html) continue;
     const rows = parseListPage(html);
     if (!rows.length) break;
@@ -77,9 +84,9 @@ async function collect({ maxPages = MAX_PAGES, log = console.log } = {}) {
   }
 
   const items = [...seen.values()];
-  log(`[기업마당] ${items.length}건 수집 완료.`);
+  log(`[기업마당] ${items.length}건 수집 완료. (요청 성공 ${stats.ok} / 실패 ${stats.failed})`);
 
-  return items.map((item) => {
+  const programs = items.map((item) => {
     // 소관부처가 지자체면 그 자체가 정답, 중앙부처면 사업수행기관·제목에서 지역을 찾습니다.
     const { regions, regionBasis } = resolveRegions({
       portalText: item.ministry,
@@ -115,6 +122,8 @@ async function collect({ maxPages = MAX_PAGES, log = console.log } = {}) {
       views: item.views,
     };
   });
+
+  return { programs, health: { ...stats, pages, expectedPages: pages } };
 }
 
 module.exports = { collect, parseListPage, lastPage };

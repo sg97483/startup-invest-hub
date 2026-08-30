@@ -1,10 +1,16 @@
 name: 공고 자동 수집 및 배포
 
-# 매일 07:00 KST(22:00 UTC)에 K-Startup·기업마당을 다시 긁어 프로덕션에 배포합니다.
+# K-Startup·기업마당을 다시 긁어 프로덕션에 배포합니다.
 # Actions 탭에서 "Run workflow" 로 수동 실행도 가능합니다.
+#
+# GitHub 의 예약 실행은 '요청'이지 '보장'이 아닙니다. 실제로 28분~8시간까지 밀렸고
+# 부하가 크면 아예 건너뛰기도 합니다. 그래서 (1) 혼잡한 정시(:00)를 피하고
+# (2) 오전 늦게 한 번 더 돌려 아침 실행이 밀리거나 걸러져도 그날 데이터가 갱신되게 합니다.
+# 동시 실행은 아래 concurrency 로 막혀 있습니다.
 on:
   schedule:
-    - cron: '0 22 * * *'
+    - cron: '35 21 * * *' # 06:35 KST
+    - cron: '35 1 * * *' # 10:35 KST (아침 실행이 밀렸을 때의 백업)
   workflow_dispatch:
 
 # 배포가 겹치지 않도록 한 번에 하나만 실행합니다.
@@ -35,21 +41,43 @@ jobs:
         run: npm run crawl
 
       - name: 수집 결과 검증
-        # 소스 사이트 구조가 바뀌어 수집이 반쯤 실패했을 때 빈 사이트를 배포하지 않도록 막습니다.
+        # 소스 하나가 실패해도 직전 데이터를 이월하므로 그날 배포까지 막지는 않습니다.
+        # 다만 (1) 전체가 무너졌거나 (2) 이월조차 못 했거나 (3) 며칠째 같은 소스가
+        # 실패해 데이터가 낡아가는 경우에는 멈추고 알립니다.
         run: |
           node -e "
             const data = require('./public/data/programs.json');
-            const sources = Object.entries(data.sources);
-            console.log('수집 결과:', data.total, '건', JSON.stringify(data.sources));
-            if (data.total < 500) {
-              console.error('수집량이 비정상적으로 적습니다(500건 미만). 배포를 중단합니다.');
+            const health = data.sourceHealth || [];
+            const lines = health.map(h =>
+              \`- \${h.source}: 신규 \${h.collected}건\` +
+              (h.carriedOver ? \` + 이월 \${h.carriedOver}건 (\${h.carriedFrom} 기준)\` : '') +
+              \` / 요청 실패 \${h.requestsFailed}건\`
+            );
+            console.log('총 ' + data.total + '건');
+            lines.forEach(l => console.log(l));
+            require('fs').appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+              ['## 수집 결과', '총 **' + data.total + '건**', '', ...lines, ''].join('\n'));
+
+            const problems = [];
+            if (data.total < 500) problems.push('전체 수집량이 500건 미만입니다.');
+
+            for (const h of health) {
+              if (h.collected === 0 && h.carriedOver === 0) {
+                problems.push(h.source + ' 수집이 0건이고 이월할 데이터도 없습니다.');
+              }
+              if (h.carriedFrom) {
+                const age = (Date.parse(data.baseDate) - Date.parse(h.carriedFrom)) / 86400000;
+                if (age > 3) problems.push(h.source + ' 데이터가 ' + Math.round(age) + '일째 갱신되지 않았습니다.');
+              }
+            }
+
+            if (problems.length) {
+              console.error('배포를 중단합니다:');
+              problems.forEach(p => console.error(' - ' + p));
               process.exit(1);
             }
-            for (const [name, count] of sources) {
-              if (count === 0) {
-                console.error(name + ' 수집이 0건입니다. 배포를 중단합니다.');
-                process.exit(1);
-              }
+            if (health.some(h => h.carriedOver)) {
+              console.warn('일부 소스를 이월했지만 배포는 계속합니다.');
             }
           "
 

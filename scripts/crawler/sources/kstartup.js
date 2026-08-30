@@ -5,7 +5,7 @@
  * The list is server-rendered, so we page through the HTML and then (optionally)
  * open each announcement's detail page for 지역 / 신청방법 / 지원대상 / 본문.
  */
-const { fetchText, mapPool } = require('../lib/http');
+const { fetchText, mapPool, createCookieJar } = require('../lib/http');
 const { toText, match1, toISODate, decodeEntities } = require('../lib/parse');
 const { normalizeCategory, resolveRegions } = require('../lib/taxonomy');
 
@@ -95,10 +95,13 @@ function parseDetail(html) {
 async function collect({ withDetail = true, detailConcurrency = 6, log = console.log } = {}) {
   log('[K-Startup] 모집중 공고 목록 수집…');
 
-  const first = await fetchText(listUrl(1));
+  const jar = createCookieJar();
+  const stats = { ok: 0, failed: 0 };
+
+  const first = await fetchText(listUrl(1), { jar, stats });
   if (!first) {
     log('[K-Startup] 첫 페이지를 가져오지 못했습니다.');
-    return [];
+    return { programs: [], health: { ...stats, pages: 0, expectedPages: 0 } };
   }
 
   const seen = new Map();
@@ -106,7 +109,7 @@ async function collect({ withDetail = true, detailConcurrency = 6, log = console
 
   let lastPage = maxAdvertisedPage(first);
   for (let page = 2; page <= Math.min(lastPage, MAX_PAGES); page++) {
-    const html = await fetchText(listUrl(page), { referer: BASE });
+    const html = await fetchText(listUrl(page), { referer: BASE, jar, stats, delayMs: 100 });
     if (!html) continue;
     const rows = parseListPage(html);
     if (!rows.length) break;
@@ -117,20 +120,21 @@ async function collect({ withDetail = true, detailConcurrency = 6, log = console
 
   const items = [...seen.values()];
   log(`[K-Startup] 목록 ${items.length}건 수집 완료.`);
+  const listPages = Math.min(lastPage, MAX_PAGES);
 
   let details = [];
   if (withDetail) {
     log(`[K-Startup] 상세 정보 보강 중 (동시 요청 ${detailConcurrency})…`);
     let done = 0;
     details = await mapPool(items, detailConcurrency, async (item) => {
-      const html = await fetchText(viewUrl(item.externalId), { referer: BASE });
+      const html = await fetchText(viewUrl(item.externalId), { referer: BASE, jar, stats });
       done += 1;
       if (done % 50 === 0) log(`  · 상세 ${done}/${items.length}`);
       return html ? parseDetail(html) : null;
     });
   }
 
-  return items.map((item, i) => {
+  const programs = items.map((item, i) => {
     const detail = details[i];
     const f = detail?.fields ?? {};
     const organization = f['주관기관명'] || item.organization;
@@ -172,6 +176,9 @@ async function collect({ withDetail = true, detailConcurrency = 6, log = console
       views: item.views,
     };
   });
+
+  log(`[K-Startup] 요청 성공 ${stats.ok} / 실패 ${stats.failed}`);
+  return { programs, health: { ...stats, pages: listPages, expectedPages: listPages } };
 }
 
 module.exports = { collect, parseListPage, parseDetail };

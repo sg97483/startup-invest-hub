@@ -4,6 +4,7 @@
 
 - **배포 주소**: https://startup-invest-hub.vercel.app
 - **현재 수집량**: 약 1,750건 (K-Startup 225건 + 기업마당 1,522건)
+- **다른 에이전트/사람이 처음 맡는다면** → [docs/HANDOFF.md](docs/HANDOFF.md) 먼저 읽기
 
 ## 1. 데이터 소스
 
